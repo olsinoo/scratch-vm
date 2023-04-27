@@ -176,14 +176,6 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
-     * Quit the VM, clearing any handles which might keep the process alive.
-     * Do not use the runtime after calling this method. This method is meant for test shutdown.
-     */
-    quit () {
-        this.runtime.quit();
-    }
-
-    /**
      * "Green flag" handler - start all threads starting with a green flag.
      */
     greenFlag () {
@@ -306,6 +298,8 @@ class VirtualMachine extends EventEmitter {
      * @return {!Promise} Promise that resolves after targets are installed.
      */
     loadProject (input) {
+        console.log('LOADING PROJECT')
+        console.log(input)
         if (typeof input === 'object' && !(input instanceof ArrayBuffer) &&
           !ArrayBuffer.isView(input)) {
             // If the input is an object and not any ArrayBuffer
@@ -374,11 +368,7 @@ class VirtualMachine extends EventEmitter {
         const vm = this;
         const promise = storage.load(storage.AssetType.Project, id);
         promise.then(projectAsset => {
-            if (!projectAsset) {
-                log.error(`Failed to fetch project with id: ${id}`);
-                return null;
-            }
-            return vm.loadProject(projectAsset.data);
+            vm.loadProject(projectAsset.data);
         });
     }
 
@@ -439,9 +429,11 @@ class VirtualMachine extends EventEmitter {
      * specified by optZipType or blob by default.
      */
     exportSprite (targetId, optZipType) {
+        const sb3 = require('./serialization/sb3');
+
         const soundDescs = serializeSounds(this.runtime, targetId);
         const costumeDescs = serializeCostumes(this.runtime, targetId);
-        const spriteJson = this.toJSON(targetId);
+        const spriteJson = StringUtil.stringify(sb3.serialize(this.runtime, targetId));
 
         const zip = new JSZip();
         zip.file('sprite.json', spriteJson);
@@ -458,13 +450,12 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
-     * Export project or sprite as a Scratch 3.0 JSON representation.
-     * @param {string=} optTargetId - Optional id of a sprite to serialize
+     * Export project as a Scratch 3.0 JSON representation.
      * @return {string} Serialized state of the runtime.
      */
-    toJSON (optTargetId) {
+    toJSON () {
         const sb3 = require('./serialization/sb3');
-        return StringUtil.stringify(sb3.serialize(this.runtime, optTargetId));
+        return StringUtil.stringify(sb3.serialize(this.runtime));
     }
 
     // TODO do we still need this function? Keeping it here so as not to introduce
@@ -479,6 +470,7 @@ class VirtualMachine extends EventEmitter {
         return this.loadProject(json);
     }
 
+    // THIS IS IMPORTANT FOR CHANGING INITIAL SPRITE
     /**
      * Load a project from a Scratch JSON representation.
      * @param {string} projectJSON JSON string representing a project.
@@ -488,6 +480,102 @@ class VirtualMachine extends EventEmitter {
     deserializeProject (projectJSON, zip) {
         // Clear the current runtime
         this.clear();
+        console.log('PRINTING projectJSON file for deserialization')
+        console.log(projectJSON)
+        for (let i = 0; i < projectJSON.targets.length; i++) {
+            if (projectJSON.targets[i].name === "Sprite1") {
+                projectJSON.targets[i] =
+                    {
+                    "name": "Beetle",
+                    "tags": [
+                        "animals",
+                        "insect",
+                        "bug",
+                        "antennae"
+                    ],
+                    "direction": 0,
+                    "isStage": false,
+                    "variables": {},
+                    "costumes": [
+                        {
+                            "assetId": "46d0dfd4ae7e9bfe3a6a2e35a4905eae",
+                            "name": "beetle",
+                            "bitmapResolution": 1,
+                            "md5ext": "46d0dfd4ae7e9bfe3a6a2e35a4905eae.svg",
+                            "dataFormat": "svg",
+                            "rotationCenterX": 43,
+                            "rotationCenterY": 38
+                        }
+                    ],
+                    "sounds": [
+                        {
+                            "assetId": "83a9787d4cb6f3b7632b4ddfebf74367",
+                            "name": "pop",
+                            "dataFormat": "wav",
+                            "format": "",
+                            "rate": 44100,
+                            "sampleCount": 1032,
+                            "md5ext": "83a9787d4cb6f3b7632b4ddfebf74367.wav"
+                        }
+                    ],
+                    "blocks": {}
+                }
+
+                // {
+                //     "isStage": false,
+                //     "name": "Beetle",
+                //     "variables": {
+                //
+                //     },
+                //     "lists": {
+                //
+                //     },
+                //     "broadcasts": {
+                //
+                //     },
+                //     "blocks": {
+                //
+                //     },
+                //     "comments": {
+                //
+                //     },
+                //     "currentCostume": 0,
+                //     "costumes": [
+                //         {
+                //             "name": "beetle",
+                //             "bitmapResolution": 1,
+                //             "dataFormat": "svg",
+                //             "assetId": "46d0dfd4ae7e9bfe3a6a2e35a4905eae",
+                //             "md5ext": "46d0dfd4ae7e9bfe3a6a2e35a4905eae.svg",
+                //             "rotationCenterX": 43,
+                //             "rotationCenterY": 38
+                //         }
+                //     ],
+                //     "sounds": [
+                //         {
+                //             "name": "pop",
+                //             "assetId": "83a9787d4cb6f3b7632b4ddfebf74367",
+                //             "dataFormat": "wav",
+                //             "format": "",
+                //             "rate": 48000,
+                //             "sampleCount": 1124,
+                //             "md5ext": "83a9787d4cb6f3b7632b4ddfebf74367.wav"
+                //         }
+                //     ],
+                //     "volume": 100,
+                //     "layerOrder": 1,
+                //     "visible": true,
+                //     "x": -31,
+                //     "y": 97,
+                //     "size": 100,
+                //     "direction": 0,
+                //     "draggable": false,
+                //     "rotationStyle": "all around"
+                // }
+
+                break
+            }
+        }
 
         if (typeof performance !== 'undefined') {
             performance.mark('scratch-vm-deserialize-start');
@@ -525,6 +613,8 @@ class VirtualMachine extends EventEmitter {
      */
     installTargets (targets, extensions, wholeProject) {
         const extensionPromises = [];
+        console.log('============================== install targets')
+        console.log(targets)
 
         extensions.extensionIDs.forEach(extensionID => {
             if (!this.extensionManager.isExtensionLoaded(extensionID)) {
@@ -800,7 +890,6 @@ class VirtualMachine extends EventEmitter {
      */
     updateSoundBuffer (soundIndex, newBuffer, soundEncoding) {
         const sound = this.editingTarget.sprite.sounds[soundIndex];
-        if (sound && sound.broken) delete sound.broken;
         const id = sound ? sound.soundId : null;
         if (id && this.runtime && this.runtime.audioEngine) {
             this.editingTarget.sprite.soundBank.getSoundPlayer(id).buffer = newBuffer;
@@ -886,7 +975,6 @@ class VirtualMachine extends EventEmitter {
     updateBitmap (costumeIndex, bitmap, rotationCenterX, rotationCenterY, bitmapResolution) {
         const costume = this.editingTarget.getCostumes()[costumeIndex];
         if (!(costume && this.runtime && this.runtime.renderer)) return;
-        if (costume && costume.broken) delete costume.broken;
 
         costume.rotationCenterX = rotationCenterX;
         costume.rotationCenterY = rotationCenterY;
@@ -945,7 +1033,6 @@ class VirtualMachine extends EventEmitter {
      */
     updateSvg (costumeIndex, svg, rotationCenterX, rotationCenterY) {
         const costume = this.editingTarget.getCostumes()[costumeIndex];
-        if (costume && costume.broken) delete costume.broken;
         if (costume && this.runtime && this.runtime.renderer) {
             costume.rotationCenterX = rotationCenterX;
             costume.rotationCenterY = rotationCenterY;
@@ -1196,13 +1283,6 @@ class VirtualMachine extends EventEmitter {
         if (['var_create', 'var_rename', 'var_delete'].indexOf(e.type) !== -1) {
             this.runtime.getTargetForStage().blocks.blocklyListen(e);
         }
-    }
-
-    /**
-     * Delete all of the flyout blocks.
-     */
-    clearFlyoutBlocks () {
-        this.runtime.flyoutBlocks.deleteAllBlocks();
     }
 
     /**
